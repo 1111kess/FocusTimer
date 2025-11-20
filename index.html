@@ -1,0 +1,873 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <title>专注计时器</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <link rel="icon" type="image/png" href="icon.png">
+  <style>
+    :root { --bg:#f4f4f5; --card:#fff; --primary:#2563eb; --danger:#dc2626; --muted:#6b7280; --radius:16px; }
+    *{box-sizing:border-box}
+    body{margin:0;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:var(--bg);display:flex;justify-content:center;padding:24px}
+    .app{width:min(1100px,100%);display:grid;gap:16px}
+    .header{background:var(--card);border-radius:var(--radius);padding:16px 20px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+    h1{font-size:1.15rem;margin:0}
+    .timer-card{background:var(--card);border-radius:var(--radius);padding:20px;display:grid;gap:16px}
+    .inputs{display:flex;gap:12px;flex-wrap:wrap}
+    .input-group{display:flex;flex-direction:column;gap:4px;min-width:120px}
+    label{font-size:.75rem;color:var(--muted)}
+    input,select{padding:6px 10px;border:1px solid #e5e7eb;border-radius:10px;font-size:.9rem}
+    .timer-display{text-align:center;display:grid;gap:6px}
+    .time{font-size:clamp(3rem,8vw,4rem);font-weight:700;letter-spacing:.08em}
+    .status{display:inline-block;padding:3px 10px;border-radius:999px;font-size:.75rem;color:#fff;justify-self:center}
+    .status.focus{background:#16a34a}.status.break{background:#f97316}.status.overrun{background:#6b7280}
+    .overrun{font-size:.8rem;color:#111}
+    .buttons{display:flex;justify-content:center;gap:10px;flex-wrap:wrap}
+    button{border:none;background:var(--primary);color:#fff;padding:8px 16px;border-radius:999px;font-weight:500;cursor:pointer;font-size:.9rem}
+    button.secondary{background:#e5e7eb;color:#111}
+    button.danger{background:var(--danger)}
+    .notice{background:#fefce8;border:1px solid #fef08a;padding:6px 10px;border-radius:12px;font-size:.75rem;color:#854d0e}
+    .log-card{background:var(--card);border-radius:var(--radius);padding:16px 20px 10px}
+    .log-header{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+    .filter-group{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+    .tag-manage{margin-top:8px;display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+    .tag-input{display:flex;gap:6px;align-items:center}
+    .tag-input input{width:140px}
+    .tag-pills{display:flex;gap:6px;flex-wrap:wrap}
+    .tag-pill{background:#eff6ff;color:#1d4ed8;padding:3px 10px;border-radius:999px;font-size:.7rem;display:inline-flex;gap:4px;align-items:center;cursor:pointer}
+    .tag-pill button{background:rgba(37,99,235,.12);border:none;border-radius:999px;padding:2px 6px;font-size:.65rem;cursor:pointer;color:#1d4ed8}
+    .tag-pill.active{background:#1d4ed8;color:#fff}.tag-pill.active button{background:rgba(255,255,255,.15);color:#fff}
+    .tag-summary{display:flex;gap:10px;flex-wrap:wrap;margin:10px 0}
+    .log-list{margin-top:8px;max-height:180px;overflow-y:auto}
+    .log-item{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #f3f4f6;padding:6px 0;font-size:.78rem;gap:8px}
+    .log-left{display:flex;flex-direction:column;gap:2px}
+    .small-btn{background:rgba(37,99,235,.08);color:#1d4ed8;border:none;border-radius:999px;padding:3px 8px;font-size:.7rem;cursor:pointer}
+    .del-btn{background:rgba(220,38,38,.08);color:#dc2626}
+    .calendar-card{background:var(--card);border-radius:var(--radius);padding:16px 20px 16px}
+    .calendar-header{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap}
+    .calendar-controls{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+    .calendar-grid{display:grid;grid-template-columns:repeat(7,minmax(80px,1fr));gap:6px}
+    .weekday{font-size:.7rem;color:var(--muted);text-align:center}
+    .day-cell{background:#f9fafb;border-radius:12px;padding:4px 6px 6px;min-height:70px;display:flex;flex-direction:column;gap:3px;cursor:pointer;border:1px solid transparent}
+    .day-cell.today{box-shadow:inset 0 0 0 1px rgba(37,99,235,.3)}
+    .day-cell.selected{border:2px solid #2563eb;background:#eff6ff}
+    .day-number{font-size:.7rem;font-weight:600}
+    .day-minutes{font-size:.7rem;color:#1d4ed8;line-height:1.1}
+    .empty-cell{background:transparent;cursor:default;border:none}
+    .month-total{font-size:.7rem;color:#6b7280}
+    .toast{position:fixed;top:20px;right:20px;background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:10px 14px;box-shadow:0 10px 30px rgba(0,0,0,.12);z-index:9999;font-size:.8rem;display:none}
+    .toast.show{display:block}
+
+    /* 弹窗：改为可相对按钮定位 */
+    .tag-picker{position:fixed;top:-9999px;left:-9999px;background:#fff;border:1px solid #e5e7eb;border-radius:14px;padding:10px;box-shadow:0 10px 30px rgba(0,0,0,.15);z-index:10000;display:none;max-width:320px}
+    .tag-picker h4{margin:0 0 6px;font-size:.75rem}
+    .tag-picker-body{display:flex;gap:6px;flex-wrap:wrap}
+    .tag-picker button{background:#eff6ff;color:#1d4ed8;border:none;border-radius:999px;padding:3px 10px;cursor:pointer;font-size:.7rem}
+    .tag-picker .close-btn{background:#e5e7eb;color:#111}
+
+    @media (max-width:900px){.calendar-grid{grid-template-columns:repeat(7,minmax(45px,1fr))}}
+    @media (max-width:640px){.header{flex-direction:column;align-items:flex-start}.inputs{flex-direction:column}body{padding:12px}.calendar-grid{grid-template-columns:repeat(7,minmax(40px,1fr))}}
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="header">
+      <h1>专注计时器</h1>
+      <div class="notice" id="todayInfo">今天专注 0 分钟</div>
+    </header>
+
+    <!-- 计时区 -->
+    <section class="timer-card">
+      <div class="inputs">
+        <div class="input-group">
+          <label for="focusMinutes">专注时长（分钟）</label>
+          <input id="focusMinutes" type="number" min="1" value="25" />
+        </div>
+        <div class="input-group">
+          <label for="breakMinutes">休息时长（分钟）</label>
+          <input id="breakMinutes" type="number" min="1" value="5" />
+        </div>
+        <div class="input-group">
+          <label for="rounds">计划轮次</label>
+          <input id="rounds" type="number" min="1" value="3" />
+        </div>
+        <!-- 新增：音量控制 + 试听按钮 -->
+        <div class="input-group">
+          <label for="volumeRange">提示音量</label>
+          <div style="display:flex;align-items:center;gap:8px;min-width:240px;">
+            <input id="volumeRange" type="range" min="0" max="100" value="40" style="flex:1;" />
+            <button id="previewBeepBtn" type="button" class="small-btn" title="试听当前音量">试听</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="timer-display">
+        <div id="status" class="status focus">专注中</div>
+        <div id="time" class="time">25:00</div>
+        <div id="roundInfo" style="color:#6b7280;font-size:.75rem;">第 1 / 3 轮</div>
+        <div id="overrunInfo" class="overrun" style="display:none;"></div>
+      </div>
+
+      <div class="buttons">
+        <button id="startPauseBtn">开始</button>
+        <button id="switchBtn" class="secondary">切到休息/专注</button>
+        <button id="endEarlyBtn" class="secondary">提前结束</button>
+        <button id="resetBtn" class="danger">重置</button>
+      </div>
+    </section>
+
+    <!-- 日志区 -->
+    <section class="log-card">
+      <div class="log-header">
+        <div class="today-total" id="todayTotalTitle">这一天专注 0 分钟</div>
+        <div class="filter-group">
+          <label for="filterTag" style="font-size:.7rem;color:var(--muted);">按标签看</label>
+          <select id="filterTag"><option value="__ALL__">全部</option></select>
+        </div>
+      </div>
+      <div class="tag-manage">
+        <div class="tag-input">
+          <input id="newTagInput" type="text" placeholder="新标签，如 阅读" />
+          <button id="addTagBtn" class="secondary" style="padding:5px 10px;">添加标签</button>
+        </div>
+        <div class="tag-pills" id="tagPills"></div>
+      </div>
+      <div class="tag-summary" id="tagSummary"></div>
+      <div class="log-list" id="logList"></div>
+    </section>
+
+    <!-- 日历区 -->
+    <section class="calendar-card">
+      <div class="calendar-header">
+        <div class="calendar-controls">
+          <button id="prevMonthBtn" class="secondary" style="padding:4px 10px;">‹</button>
+          <select id="monthSelect" style="min-width:140px;"></select>
+          <button id="nextMonthBtn" class="secondary" style="padding:4px 10px;">›</button>
+          <button id="backToTodayBtn" class="secondary" style="padding:4px 10px;">回到今天</button>
+        </div>
+        <div class="month-total" id="monthTotal">本月共专注 0 分钟</div>
+      </div>
+      <div class="calendar-grid" id="calendarGrid"></div>
+    </section>
+  </div>
+
+  <!-- 提示 / 标签选择器 -->
+  <div id="toast" class="toast"></div>
+  <div id="tagPicker" class="tag-picker">
+    <h4>选择一个标签</h4>
+    <div class="tag-picker-body" id="tagPickerBody"></div>
+    <button class="close-btn" id="closeTagPicker" style="margin-top:6px;">关闭</button>
+  </div>
+
+  <script>
+    // ===== DOM =====
+    const timeEl = document.getElementById('time');
+    const statusEl = document.getElementById('status');
+    const roundInfoEl = document.getElementById('roundInfo');
+    const overrunEl = document.getElementById('overrunInfo');
+    const todayInfoEl = document.getElementById('todayInfo');
+    const focusInput = document.getElementById('focusMinutes');
+    const breakInput = document.getElementById('breakMinutes');
+    const roundsInput = document.getElementById('rounds');
+    const volumeRange = document.getElementById('volumeRange');
+    const previewBeepBtn = document.getElementById('previewBeepBtn');
+    const startPauseBtn = document.getElementById('startPauseBtn');
+    const switchBtn = document.getElementById('switchBtn');
+    const resetBtn = document.getElementById('resetBtn');
+    const endEarlyBtn = document.getElementById('endEarlyBtn');
+    const logListEl = document.getElementById('logList');
+    const tagSummaryEl = document.getElementById('tagSummary');
+    const todayTotalTitleEl = document.getElementById('todayTotalTitle');
+    const calendarGridEl = document.getElementById('calendarGrid');
+    const tagPillsEl = document.getElementById('tagPills');
+    const newTagInput = document.getElementById('newTagInput');
+    const addTagBtn = document.getElementById('addTagBtn');
+    const filterTagSelect = document.getElementById('filterTag');
+    const monthSelect = document.getElementById('monthSelect');
+    const prevMonthBtn = document.getElementById('prevMonthBtn');
+    const nextMonthBtn = document.getElementById('nextMonthBtn');
+    const backToTodayBtn = document.getElementById('backToTodayBtn');
+    const monthTotalEl = document.getElementById('monthTotal');
+    const toastEl = document.getElementById('toast');
+    const tagPickerEl = document.getElementById('tagPicker');
+    const tagPickerBodyEl = document.getElementById('tagPickerBody');
+    const closeTagPickerEl = document.getElementById('closeTagPicker');
+
+    // ===== Timer State =====
+    let timer = null;
+    let isRunning = false;
+    let mode = 'focus'; // focus | break
+    let remainingSeconds = Number(focusInput.value) * 60;
+    let currentRound = 1;
+    let sessionActive = false;
+    let currentFocusPlannedSeconds = Number(focusInput.value) * 60;
+    let sessionTempRecords = [];
+    let currentSelectedTag = '未分类';
+    let currentFocusStart = null; // 每段专注开始时间（HH:MM）
+
+    // 真实时间计时
+    let targetTimestamp = null;
+
+    // 额外计时
+    let isOverrun = false;           // 是否处于额外计时
+    let overrunFor = null;           // 'focus' | 'break'
+    let overrunStart = null;         // 额外计时的起点时间戳
+    let overrunTick = null;          // 额外计时 interval
+    let pendingNextMode = null;      // 结束后等待开始的下一阶段
+
+    // 音量
+    let beepVolume = Number(localStorage.getItem('focusBeepVol') || '40'); // 0-100
+    volumeRange.value = beepVolume.toString();
+    volumeRange.addEventListener('input', ()=>{
+      beepVolume = Number(volumeRange.value || 40);
+      localStorage.setItem('focusBeepVol', String(beepVolume));
+    });
+    // 试听按钮：即时播放当前音量
+    previewBeepBtn.addEventListener('click', ()=>{ playBeep(); });
+
+    // === 最小补丁：共享 AudioContext + 一次性解锁（仅此新增） ===
+    let __sharedAudioCtx = null;
+    function getAudioCtx(){
+      if(!__sharedAudioCtx){
+        __sharedAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      if(__sharedAudioCtx.state !== 'running'){
+        try{ __sharedAudioCtx.resume(); }catch(e){}
+      }
+      return __sharedAudioCtx;
+    }
+    function unlockAudioOnce(){
+      try{
+        const ctx = getAudioCtx();
+        const b = ctx.createBuffer(1, 1, 22050);
+        const s = ctx.createBufferSource();
+        s.buffer = b;
+        s.connect(ctx.destination);
+        s.start(0);
+      }catch(e){}
+    }
+    document.addEventListener('pointerdown', unlockAudioOnce, { passive: true });
+    document.addEventListener('keydown',      unlockAudioOnce, { passive: true });
+    document.addEventListener('visibilitychange', ()=>{
+      try{ getAudioCtx().resume(); }catch(e){}
+    });
+    // === 最小补丁新增结束 ===
+
+    // ===== Logs/Calendar State =====
+    let currentViewDate = getTodayKey();
+    let currentFilterTag = '__ALL__';
+    const today = new Date();
+    let calendarYear = today.getFullYear();
+    let calendarMonth = today.getMonth();
+    let selectedDateKey = getTodayKey();
+    let currentEditingLogId = null;
+
+    // ===== Utils =====
+    function getTodayKey(){
+      const d=new Date();
+      return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    }
+    function getTimeString(d = new Date()){
+      const h = String(d.getHours()).padStart(2,'0');
+      const m = String(d.getMinutes()).padStart(2,'0');
+      return `${h}:${m}`;
+    }
+    function fmtMS(sec){
+      const m=Math.floor(sec/60), s=sec%60;
+      return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+    }
+    function renderTime(sec){ timeEl.textContent = fmtMS(Math.max(0,sec)); }
+    // === 最小补丁：改为复用共享 AudioContext（仅此替换） ===
+    function playBeep(){
+      try{
+        const ctx = getAudioCtx();
+        const v = Math.max(0, Math.min(1, beepVolume/100));
+        const osc  = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(880, ctx.currentTime);
+        gain.gain.setValueAtTime(v, ctx.currentTime);
+        osc.connect(gain).connect(ctx.destination);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.4);
+      }catch(e){}
+    }
+    // === 最小补丁替换结束 ===
+    function showToast(text){ toastEl.textContent=text; toastEl.classList.add('show'); playBeep(); setTimeout(()=>toastEl.classList.remove('show'), 3500); }
+
+    // ===== Storage =====
+    function loadLogsRaw(){ return JSON.parse(localStorage.getItem('focusLogsV1')||'[]'); }
+    function saveLogs(logs){ localStorage.setItem('focusLogsV1', JSON.stringify(logs)); }
+    function migrateLogs(){
+      const logs=loadLogsRaw();
+      let changed=false;
+      logs.forEach(l=>{
+        if(!l.id){
+          l.id='log-'+Date.now()+'-'+Math.random().toString(16).slice(2,6);
+          changed=true;
+        }
+      });
+      if(changed) saveLogs(logs);
+      return logs;
+    }
+    function loadLogs(){ return migrateLogs(); }
+    function loadTags(){ return JSON.parse(localStorage.getItem('focusTagsV1')||'["阅读","写作","代码","备考","未分类"]'); }
+    function saveTags(tags){ localStorage.setItem('focusTagsV1', JSON.stringify(tags)); }
+
+    // ===== Tags UI =====
+    function renderTags(){
+      const tags=loadTags();
+      tagPillsEl.innerHTML='';
+      filterTagSelect.innerHTML='<option value="__ALL__">全部</option>';
+      tags.forEach(tag=>{
+        const pill=document.createElement('div');
+        pill.className='tag-pill'+(tag===currentSelectedTag?' active':'');
+        pill.innerHTML=`<span>${tag}</span><button data-act="edit" data-tag="${tag}">改</button><button data-act="del" data-tag="${tag}" style="background:rgba(220,38,38,.1);color:#fff;">×</button>`;
+        pill.addEventListener('click',(e)=>{
+          if(e.target.dataset.act) return;
+          currentSelectedTag=tag;
+          renderTags();
+        });
+        tagPillsEl.appendChild(pill);
+        const opt=document.createElement('option');
+        opt.value=tag;
+        opt.textContent=tag;
+        filterTagSelect.appendChild(opt);
+      });
+      filterTagSelect.value=currentFilterTag;
+    }
+    addTagBtn.addEventListener('click', ()=>{
+      const v=newTagInput.value.trim();
+      if(!v) return;
+      const tags=loadTags();
+      if(!tags.includes(v)){
+        tags.push(v);
+        saveTags(tags);
+      }
+      currentSelectedTag=v;
+      newTagInput.value='';
+      renderTags();
+    });
+    tagPillsEl.addEventListener('click',(e)=>{
+      const act=e.target.dataset.act, tag=e.target.dataset.tag;
+      if(!act||!tag) return;
+      const tags=loadTags();
+      if(act==='edit'){
+        const nn=prompt('编辑标签名称', tag);
+        if(nn&&nn.trim()){
+          const idx=tags.indexOf(tag);
+          tags[idx]=nn.trim();
+          saveTags(tags);
+          const logs=loadLogs();
+          logs.forEach(l=>{ if(l.tag===tag) l.tag=nn.trim(); });
+          saveLogs(logs);
+          if(currentSelectedTag===tag) currentSelectedTag=nn.trim();
+          if(currentFilterTag===tag) currentFilterTag=nn.trim();
+          renderTags(); renderLogs(currentViewDate,currentFilterTag); renderCalendar();
+        }
+      } else if(act==='del'){
+        const ok=confirm(`删除标签 ${tag}？已有记录会改成 未分类`);
+        if(!ok) return;
+        const nt=tags.filter(t=>t!==tag);
+        saveTags(nt);
+        const logs=loadLogs();
+        logs.forEach(l=>{ if(l.tag===tag) l.tag='未分类'; });
+        saveLogs(logs);
+        if(currentSelectedTag===tag) currentSelectedTag='未分类';
+        if(currentFilterTag===tag) currentFilterTag='__ALL__';
+        renderTags(); renderLogs(currentViewDate,currentFilterTag); renderCalendar();
+      }
+    });
+
+    // ===== Logs UI =====
+    function renderLogs(dateKey, filterTagVal){
+      const logs=loadLogs();
+      const dayKey=dateKey||getTodayKey();
+      currentViewDate=dayKey;
+      currentFilterTag=filterTagVal||currentFilterTag||'__ALL__';
+      let dayLogs=logs.filter(l=>l.date===dayKey);
+      if(currentFilterTag!=='__ALL__') dayLogs=dayLogs.filter(l=>l.tag===currentFilterTag);
+      logListEl.innerHTML='';
+      dayLogs.slice().reverse().forEach(l=>{
+        const div=document.createElement('div');
+        div.className='log-item';
+        const timeLabel = l.startTime ? `${l.date} ${l.startTime}` : l.date;
+        div.innerHTML=`<div class="log-left"><strong>${l.tag}</strong><small>${timeLabel}</small></div><div>${l.minutes} 分钟</div><div class="log-actions"><button class="small-btn edit-tag-btn" data-id="${l.id}">改标签</button><button class="del-btn" data-id="${l.id}">删除</button></div>`;
+        logListEl.appendChild(div);
+      });
+      const total=dayLogs.reduce((s,l)=>s+l.minutes,0);
+      todayInfoEl.textContent=`这一天 ${dayKey} (${currentFilterTag==='__ALL__'?'全部标签':currentFilterTag}) 专注 ${total} 分钟`;
+      todayTotalTitleEl.textContent=`这一天专注 ${total} 分钟`;
+      const dayAll=logs.filter(l=>l.date===dayKey);
+      const tagMap={};
+      dayAll.forEach(l=>{ tagMap[l.tag]=(tagMap[l.tag]||0)+l.minutes; });
+      tagSummaryEl.innerHTML='';
+      Object.keys(tagMap).forEach(t=>{
+        const p=document.createElement('div');
+        p.className='tag-pill';
+        p.textContent=`${t} · ${tagMap[t]} 分钟`;
+        tagSummaryEl.appendChild(p);
+      });
+    }
+
+    // 改：把按钮元素传入定位
+    logListEl.addEventListener('click',(e)=>{
+      if(e.target.classList.contains('del-btn')){
+        const id=e.target.getAttribute('data-id');
+        const logs=loadLogs();
+        saveLogs(logs.filter(l=>l.id!==id));
+        renderLogs(currentViewDate,currentFilterTag);
+        renderCalendar();
+      }
+      if(e.target.classList.contains('edit-tag-btn')){
+        const id=e.target.getAttribute('data-id');
+        openTagPickerForLog(id, e.target);
+      }
+    });
+
+    function openTagPickerForLog(logId, anchorEl){
+      currentEditingLogId = logId;
+      const tags = loadTags();
+      tagPickerBodyEl.innerHTML = '';
+      tags.forEach(t=>{
+        const btn=document.createElement('button');
+        btn.textContent=t;
+        btn.addEventListener('click', ()=>applyTagToLog(logId, t));
+        tagPickerBodyEl.appendChild(btn);
+      });
+
+      tagPickerEl.style.display='block';
+      positionTagPickerNear(anchorEl, tagPickerEl);
+
+      setTimeout(()=>{
+        window.addEventListener('mousedown', outsideCloseOnce);
+      }, 0);
+      function outsideCloseOnce(ev){
+        if(!tagPickerEl.contains(ev.target)){
+          tagPickerEl.style.display='none';
+          currentEditingLogId=null;
+          window.removeEventListener('mousedown', outsideCloseOnce);
+        }
+      }
+    }
+
+    function positionTagPickerNear(anchorEl, pickerEl){
+      const pad=8;
+      const rect=anchorEl.getBoundingClientRect();
+      let top=rect.bottom+pad;
+      let left=rect.left;
+      const pw=pickerEl.offsetWidth;
+      const ph=pickerEl.offsetHeight;
+      const vw=window.innerWidth;
+      const vh=window.innerHeight;
+      if(left+pw>vw-pad){ left=Math.max(pad, vw-pad-pw); }
+      if(top+ph>vh-pad){ top=rect.top-pad-ph; }
+      if(left<pad) left=pad;
+      if(top<pad) top=pad;
+      pickerEl.style.left = left+"px";
+      pickerEl.style.top  = top+"px";
+    }
+
+    function applyTagToLog(id,tag){
+      const logs=loadLogs();
+      const l=logs.find(x=>x.id===id);
+      if(!l) return;
+      l.tag=tag;
+      saveLogs(logs);
+      tagPickerEl.style.display='none';
+      currentEditingLogId=null;
+      renderLogs(currentViewDate,currentFilterTag);
+      renderCalendar();
+      renderTags();
+    }
+    closeTagPickerEl.addEventListener('click',()=>{
+      tagPickerEl.style.display='none';
+      currentEditingLogId=null;
+    });
+    filterTagSelect.addEventListener('change',()=>{
+      currentFilterTag=filterTagSelect.value;
+      renderLogs(currentViewDate,currentFilterTag);
+    });
+
+    // ===== Calendar UI =====
+    function renderCalendar(){
+      const logs=loadLogs();
+      calendarGridEl.innerHTML='';
+      const monthSet=new Set();
+      logs.forEach(l=>monthSet.add(l.date.slice(0,7)));
+      const curMonthKey=`${calendarYear}-${String(calendarMonth+1).padStart(2,'0')}`;
+      monthSet.add(curMonthKey);
+      const arr=[...monthSet].sort();
+      monthSelect.innerHTML='';
+      arr.forEach(mk=>{
+        const o=document.createElement('option');
+        o.value=mk;
+        o.textContent=mk.replace('-',' 年 ')+' 月';
+        monthSelect.appendChild(o);
+      });
+      monthSelect.value=curMonthKey;
+      const dayTotalMap={};
+      logs.forEach(l=>{ dayTotalMap[l.date]=(dayTotalMap[l.date]||0)+l.minutes; });
+      const weekdays=['日','一','二','三','四','五','六'];
+      weekdays.forEach(w=>{
+        const d=document.createElement('div');
+        d.className='weekday';
+        d.textContent=w;
+        calendarGridEl.appendChild(d);
+      });
+      const first=new Date(calendarYear,calendarMonth,1);
+      const startWd=first.getDay();
+      const days=new Date(calendarYear,calendarMonth+1,0).getDate();
+      const todayKey=getTodayKey();
+      for(let i=0;i<startWd;i++){
+        const e=document.createElement('div');
+        e.className='day-cell empty-cell';
+        calendarGridEl.appendChild(e);
+      }
+      for(let day=1;day<=days;day++){
+        const key=`${calendarYear}-${String(calendarMonth+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+        const cell=document.createElement('div');
+        cell.className='day-cell';
+        if(key===todayKey) cell.classList.add('today');
+        if(key===selectedDateKey) cell.classList.add('selected');
+        const num=document.createElement('div');
+        num.className='day-number';
+        num.textContent=day;
+        const mins=document.createElement('div');
+        mins.className='day-minutes';
+        const m=dayTotalMap[key]||0;
+        mins.textContent=m>0?`${m} 分钟`:'';
+        cell.appendChild(num);
+        cell.appendChild(mins);
+        cell.addEventListener('click',()=>{
+          selectedDateKey=key;
+          renderLogs(key,currentFilterTag);
+          renderCalendar();
+        });
+        calendarGridEl.appendChild(cell);
+      }
+      const monthKey=`${calendarYear}-${String(calendarMonth+1).padStart(2,'0')}`;
+      const monthTotal=logs.filter(l=>l.date.startsWith(monthKey)).reduce((s,l)=>s+l.minutes,0);
+      monthTotalEl.textContent=`${monthKey.replace('-',' 年 ')} 月共专注 ${monthTotal} 分钟`;
+    }
+    prevMonthBtn.addEventListener('click',()=>{
+      calendarMonth--;
+      if(calendarMonth<0){calendarMonth=11;calendarYear--;}
+      selectedDateKey=`${calendarYear}-${String(calendarMonth+1).padStart(2,'0')}-01`;
+      renderCalendar();
+      renderLogs(selectedDateKey,currentFilterTag);
+    });
+    nextMonthBtn.addEventListener('click',()=>{
+      calendarMonth++;
+      if(calendarMonth>11){calendarMonth=0;calendarYear++;}
+      selectedDateKey=`${calendarYear}-${String(calendarMonth+1).padStart(2,'0')}-01`;
+      renderCalendar();
+      renderLogs(selectedDateKey,currentFilterTag);
+    });
+    backToTodayBtn.addEventListener('click',()=>{
+      const t=new Date();
+      calendarYear=t.getFullYear();
+      calendarMonth=t.getMonth();
+      selectedDateKey=getTodayKey();
+      renderCalendar();
+      renderLogs(selectedDateKey,currentFilterTag);
+    });
+    monthSelect.addEventListener('change',()=>{
+      const [y,m]=monthSelect.value.split('-').map(Number);
+      calendarYear=y;
+      calendarMonth=m-1;
+      selectedDateKey=`${y}-${String(m).padStart(2,'0')}-01`;
+      renderCalendar();
+      renderLogs(selectedDateKey,currentFilterTag);
+    });
+
+    // ===== Timer Logic (real time + overrun) =====
+    function setMode(nextMode){
+      mode=nextMode;
+      stopOverrun();
+      if(mode==='focus'){
+        remainingSeconds=Number(focusInput.value)*60;
+        currentFocusPlannedSeconds=remainingSeconds;
+        statusEl.textContent='专注中';
+        statusEl.className='status focus';
+      } else {
+        remainingSeconds=Number(breakInput.value)*60;
+        statusEl.textContent='休息中';
+        statusEl.className='status break';
+      }
+      targetTimestamp=null;
+      renderTime(remainingSeconds);
+    }
+    function updateRoundInfo(){
+      const total=Math.max(1, Number(roundsInput.value));
+      roundInfoEl.textContent=`第 ${currentRound} / ${total} 轮`;
+    }
+
+    function startTimer(){
+      if(isRunning) return;
+
+      // 若在额外计时状态，按开始=结束额外计时并切换到待定阶段
+      if(isOverrun && pendingNextMode){
+        const extraSec=Math.max(0, Math.floor((Date.now()-overrunStart)/1000));
+        if(overrunFor==='focus'){
+          const totalSec=currentFocusPlannedSeconds+extraSec;
+          const totalMin=Math.max(1, Math.round(totalSec/60));
+          sessionTempRecords.push({
+            id:'tmp-'+Date.now(),
+            date:getTodayKey(),
+            minutes: totalMin,
+            tag: currentSelectedTag,
+            startTime: currentFocusStart || getTimeString()
+          });
+          currentFocusStart = null;
+        }
+        stopOverrun();
+
+        const next = pendingNextMode;
+        if(next === 'session-end'){
+          saveSessionRecords(); sessionActive=false; pendingNextMode=null;
+          setMode('focus'); currentRound=1; updateRoundInfo();
+          showToast('本次全部轮次已记录完成'); return;
+        }
+        if(next === 'focus'){
+          const total = Math.max(1, Number(roundsInput.value));
+          currentRound = Math.min(currentRound + 1, total);
+          updateRoundInfo();
+        }
+        setMode(next);
+        pendingNextMode=null;
+      }
+
+      if(!sessionActive && mode==='focus'){
+        sessionActive=true; sessionTempRecords=[]; currentRound=1; updateRoundInfo();
+      }
+
+      if(mode === 'focus' && !isOverrun && !currentFocusStart){
+        currentFocusStart = getTimeString();
+      }
+
+      if(!targetTimestamp) targetTimestamp = Date.now() + remainingSeconds*1000;
+      isRunning=true;
+      startPauseBtn.textContent='暂停';
+      timer=setInterval(tick,1000);
+      tick();
+    }
+
+    function tick(){
+      const diff=Math.floor((targetTimestamp-Date.now())/1000);
+      remainingSeconds=diff;
+      if(remainingSeconds<=0){
+        clearInterval(timer);
+        isRunning=false;
+        startPauseBtn.textContent='开始';
+        remainingSeconds=0;
+        renderTime(0);
+        statusEl.textContent = mode==='focus' ? '专注结束' : '休息结束';
+        statusEl.className='status overrun';
+        showToast(mode==='focus' ? '专注结束，可选择休息或继续额外专注' : '休息结束，可开始下一轮专注');
+        startOverrun(mode);
+        const totalRounds=Math.max(1, Number(roundsInput.value));
+        if(mode==='focus') pendingNextMode = currentRound>=totalRounds ? 'session-end' : 'break';
+        else pendingNextMode = (currentRound<totalRounds) ? 'focus' : 'session-end';
+      } else {
+        renderTime(remainingSeconds);
+      }
+    }
+
+    function pauseTimer(){
+      clearInterval(timer);
+      isRunning=false;
+      startPauseBtn.textContent='开始';
+      targetTimestamp=null;
+    }
+
+    function startOverrun(which){
+      isOverrun=true;
+      overrunFor=which;
+      overrunStart=Date.now();
+      overrunEl.style.display='block';
+      overrunEl.textContent= which==='focus' ? '已额外专注 00:00' : '已额外休息 00:00';
+      if(overrunTick) clearInterval(overrunTick);
+      overrunTick=setInterval(()=>{
+        const sec=Math.max(0, Math.floor((Date.now()-overrunStart)/1000));
+        overrunEl.textContent=(which==='focus' ? '已额外专注 ' : '已额外休息 ')+fmtMS(sec);
+      },1000);
+    }
+    function stopOverrun(){
+      isOverrun=false;
+      overrunFor=null;
+      overrunStart=null;
+      if(overrunTick){
+        clearInterval(overrunTick);
+        overrunTick=null;
+      }
+      overrunEl.style.display='none';
+    }
+
+    function saveSessionRecords(){
+      if(sessionTempRecords.length===0) return;
+      const logs=loadLogs();
+      sessionTempRecords.forEach(r=>{
+        logs.push({
+          id:'log-'+Date.now()+'-'+Math.random().toString(16).slice(2,6),
+          date:r.date,
+          minutes:r.minutes,
+          tag:r.tag,
+          startTime: r.startTime || null
+        });
+      });
+      saveLogs(logs);
+      sessionTempRecords=[];
+      renderLogs(getTodayKey(), currentFilterTag);
+      renderCalendar();
+    }
+
+    function endSessionEarly(){
+      if(sessionActive){
+        if(isRunning && mode==='focus'){
+          const spentSec=Math.max(0, currentFocusPlannedSeconds - Math.max(0, remainingSeconds));
+          const totalMin=Math.max(1, Math.round(spentSec/60));
+          if(totalMin>0){
+            sessionTempRecords.push({
+              id:'tmp-'+Date.now(),
+              date:getTodayKey(),
+              minutes: totalMin,
+              tag: currentSelectedTag,
+              startTime: currentFocusStart || getTimeString()
+            });
+            currentFocusStart = null;
+          }
+        } else if(isOverrun && overrunFor==='focus'){
+          const extraSec=Math.max(0, Math.floor((Date.now()-overrunStart)/1000));
+          const totalSec=currentFocusPlannedSeconds+extraSec;
+          const totalMin=Math.max(1, Math.round(totalSec/60));
+          sessionTempRecords.push({
+            id:'tmp-'+Date.now(),
+            date:getTodayKey(),
+            minutes: totalMin,
+            tag: currentSelectedTag,
+            startTime: currentFocusStart || getTimeString()
+          });
+          currentFocusStart = null;
+          stopOverrun();
+        }
+      }
+      saveSessionRecords();
+      clearInterval(timer);
+      isRunning=false;
+      startPauseBtn.textContent='开始';
+      sessionActive=false;
+      pendingNextMode=null;
+      stopOverrun();
+      setMode('focus');
+      currentRound=1;
+      updateRoundInfo();
+      currentFocusStart = null;
+    }
+
+    // ===== Events =====
+    startPauseBtn.addEventListener('click', ()=>{
+      if(isRunning) { pauseTimer(); return; }
+      if(pendingNextMode==='session-end'){
+        if(isOverrun && overrunFor==='focus'){
+          const extraSec=Math.max(0, Math.floor((Date.now()-overrunStart)/1000));
+          const totalSec=currentFocusPlannedSeconds+extraSec;
+          const totalMin=Math.max(1, Math.round(totalSec/60));
+          sessionTempRecords.push({
+            id:'tmp-'+Date.now(),
+            date:getTodayKey(),
+            minutes: totalMin,
+            tag: currentSelectedTag,
+            startTime: currentFocusStart || getTimeString()
+          });
+          currentFocusStart = null;
+        }
+        stopOverrun();
+        saveSessionRecords();
+        sessionActive=false;
+        pendingNextMode=null;
+        setMode('focus');
+        currentRound=1;
+        updateRoundInfo();
+        showToast('本次全部轮次已记录完成');
+        return;
+      }
+      startTimer();
+    });
+
+    switchBtn.addEventListener('click', ()=>{
+      if(isRunning) { pauseTimer(); }
+
+      if(isOverrun){
+        if(overrunFor==='focus'){
+          const extraSec=Math.max(0, Math.floor((Date.now()-overrunStart)/1000));
+          const totalSec=currentFocusPlannedSeconds+extraSec;
+          const totalMin=Math.max(1, Math.round(totalSec/60));
+          sessionTempRecords.push({
+            id:'tmp-'+Date.now(),
+            date:getTodayKey(),
+            minutes: totalMin,
+            tag: currentSelectedTag,
+            startTime: currentFocusStart || getTimeString()
+          });
+          currentFocusStart = null;
+        }
+        stopOverrun();
+      }
+
+      const wasBreak = (mode === 'break');
+
+      setMode(mode==='focus' ? 'break' : 'focus');
+
+      if(wasBreak && sessionActive){
+        const total = Math.max(1, Number(roundsInput.value));
+        currentRound = Math.min(currentRound + 1, total);
+        updateRoundInfo();
+      }
+    });
+
+    resetBtn.addEventListener('click', ()=>{
+      pauseTimer();
+      stopOverrun();
+      sessionActive=false;
+      sessionTempRecords=[];
+      pendingNextMode=null;
+      currentRound=1;
+      updateRoundInfo();
+      setMode('focus');
+      currentFocusStart = null;
+    });
+    endEarlyBtn.addEventListener('click', endSessionEarly);
+
+    focusInput.addEventListener('change', ()=>{
+      const sec=Number(focusInput.value)*60;
+      currentFocusPlannedSeconds=sec;
+      if(!sessionActive && !isRunning && mode==='focus'){
+        remainingSeconds=sec;
+        targetTimestamp=null;
+        renderTime(remainingSeconds);
+      }
+    });
+    breakInput.addEventListener('change', ()=>{
+      const sec=Number(breakInput.value)*60;
+      if(!sessionActive && !isRunning && mode==='break'){
+        remainingSeconds=sec;
+        targetTimestamp=null;
+        renderTime(remainingSeconds);
+      }
+    });
+    roundsInput.addEventListener('change', ()=>{
+      const v=Math.max(1, Number(roundsInput.value));
+      roundsInput.value=v;
+      if(!sessionActive) currentRound=1;
+      updateRoundInfo();
+    });
+
+    // ===== Init =====
+    renderTime(remainingSeconds);
+    renderTags();
+    renderLogs(getTodayKey(), currentFilterTag);
+    renderCalendar();
+  </script>
+</body>
+</html>

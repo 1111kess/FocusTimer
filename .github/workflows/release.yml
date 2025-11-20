@@ -1,0 +1,35 @@
+name: Build & Release FocusTimer
+
+on:
+  push:
+    tags:
+      - 'v*'        # 只有推送形如 v1.0.0 的 tag 才会触发
+  workflow_dispatch: # 也允许你在 GitHub 界面手动点运行
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [macos-latest, windows-latest, ubuntu-latest]
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build with electron-builder
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: |
+          npx electron-builder --$([[ "$RUNNER_OS" == "macOS" ]] && echo "mac" || ([[ "$RUNNER_OS" == "Windows" ]] && echo "win" || echo "linux"))

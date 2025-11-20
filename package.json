@@ -1,0 +1,42 @@
+{
+  "name": "focus-timer",
+  "version": "1.0.0",
+  "description": "专注计时器桌面版",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder"
+  },
+  "build": {
+    "appId": "com.example.focustimer",
+    "productName": "专注计时器",
+
+    "directories": {
+      "output": "dist"
+    },
+
+    "mac": {
+      "target": ["dmg"],
+      "category": "public.app-category.productivity",
+      "artifactName": "FocusTimer-${version}-mac.${ext}"
+    },
+    "win": {
+      "target": ["nsis"],
+      "artifactName": "FocusTimer-${version}-win.${ext}"
+    },
+    "linux": {
+      "target": ["AppImage"],
+      "artifactName": "FocusTimer-${version}-linux.${ext}"
+    },
+
+    "publish": [
+      {
+        "provider": "github"
+      }
+    ]
+  },
+  "devDependencies": {
+    "electron": "^34.0.0",
+    "electron-builder": "^25.1.8"
+  }
+}

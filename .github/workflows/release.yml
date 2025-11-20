@@ -3,8 +3,8 @@ name: Build & Release FocusTimer
 on:
   push:
     tags:
-      - "v*"              # 推送 tag 才触发，如 v1.0.0
-  workflow_dispatch:      # 也允许你手动运行
+      - 'v*'          # 推送 v1.0.0 这类 tag 时触发
+  workflow_dispatch:   # 也允许手动运行
 
 jobs:
   build:
@@ -14,6 +14,10 @@ jobs:
 
     runs-on: ${{ matrix.os }}
 
+    # 关键：把仓库里的 GH_TOKEN secret 注入为环境变量
+    env:
+      GH_TOKEN: ${{ secrets.GH_TOKEN }}
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -21,8 +25,8 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
-          cache: "npm"
+          node-version: '20'
+          cache: 'npm'
 
       - name: Install dependencies
         run: npm install
@@ -31,15 +35,9 @@ jobs:
         shell: bash
         run: |
           if [ "$RUNNER_OS" = "macOS" ]; then
-            npx electron-builder --mac
+            npx electron-builder --mac --publish always
           elif [ "$RUNNER_OS" = "Windows" ]; then
-            npx electron-builder --win
+            npx electron-builder --win --publish always
           else
-            npx electron-builder --linux
+            npx electron-builder --linux --publish always
           fi
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: dist-${{ matrix.os }}
-          path: dist/

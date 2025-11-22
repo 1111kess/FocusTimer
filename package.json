@@ -1,6 +1,6 @@
 {
   "name": "focus-timer",
-  "version": "1.0.0",
+  "version": "1.0.4",
   "description": "专注计时器桌面版",
   "main": "main.js",
   "scripts": {
@@ -10,25 +10,28 @@
   "build": {
     "appId": "com.example.focustimer",
     "productName": "专注计时器",
-
     "directories": {
       "output": "dist"
     },
-
     "mac": {
-      "target": ["dmg"],
+      "target": [
+        "dmg"
+      ],
       "category": "public.app-category.productivity",
       "artifactName": "FocusTimer-${version}-mac.${ext}"
     },
     "win": {
-      "target": ["nsis"],
+      "target": [
+        "nsis"
+      ],
       "artifactName": "FocusTimer-${version}-win.${ext}"
     },
     "linux": {
-      "target": ["AppImage"],
+      "target": [
+        "AppImage"
+      ],
       "artifactName": "FocusTimer-${version}-linux.${ext}"
     },
-
     "publish": [
       {
         "provider": "github"

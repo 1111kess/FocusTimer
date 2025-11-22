@@ -724,11 +724,13 @@
 
     function endSessionEarly(){
       if(sessionActive){
-        if(isRunning && mode==='focus'){
-          const spentSec=Math.max(0, currentFocusPlannedSeconds - Math.max(0, remainingSeconds));
-          const totalMin=Math.max(1, Math.round(spentSec/60));
-          if(totalMin>0){
-            sessionTempRecords.push({
+        // ✅ 无论是否暂停，只要当前是专注阶段（且不在额外计时），都用剩余时间来算本轮专注
+        if(mode === 'focus' && !isOverrun){
+         const spentSec = Math.max(0, currentFocusPlannedSeconds - Math.max(0, remainingSeconds));
+         const totalMin = Math.max(1, Math.round(spentSec/60));
+    
+        if(totalMin > 0){
+          sessionTempRecords.push({
               id:'tmp-'+Date.now(),
               date:getTodayKey(),
               minutes: totalMin,
@@ -749,9 +751,10 @@
             startTime: currentFocusStart || getTimeString()
           });
           currentFocusStart = null;
-          stopOverrun();
+         stopOverrun();
         }
       }
+
       saveSessionRecords();
       clearInterval(timer);
       isRunning=false;
@@ -764,6 +767,7 @@
       updateRoundInfo();
       currentFocusStart = null;
     }
+    
 
     // ===== Events =====
     startPauseBtn.addEventListener('click', ()=>{

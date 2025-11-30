@@ -64,6 +64,36 @@
     .tag-picker-body{display:flex;gap:6px;flex-wrap:wrap}
     .tag-picker button{background:#eff6ff;color:#1d4ed8;border:none;border-radius:999px;padding:3px 10px;cursor:pointer;font-size:.7rem}
     .tag-picker .close-btn{background:#e5e7eb;color:#111}
+    
+    /* 手动添加时间的小弹窗 */
+    .manual-modal{
+      position:fixed;
+      top:50%;
+      left:50%;
+      transform:translate(-50%,-50%);
+      background:#fff;
+      border:1px solid #e5e7eb;
+      border-radius:12px;
+      padding:12px 16px;
+      box-shadow:0 10px 30px rgba(0,0,0,.18);
+      font-size:.8rem;
+      z-index:10001;
+      display:none;
+      min-width:240px;
+      max-width:90%;
+    }
+    .manual-modal-row{
+      margin-bottom:8px;
+      display:flex;
+      align-items:center;
+      gap:6px;
+    }
+    .manual-modal-actions{
+      display:flex;
+      justify-content:flex-end;
+      gap:8px;
+      margin-top:4px;
+    }
 
     @media (max-width:900px){.calendar-grid{grid-template-columns:repeat(7,minmax(45px,1fr))}}
     @media (max-width:640px){.header{flex-direction:column;align-items:flex-start}.inputs{flex-direction:column}body{padding:12px}.calendar-grid{grid-template-columns:repeat(7,minmax(40px,1fr))}}
@@ -119,7 +149,13 @@
     <!-- 日志区 -->
     <section class="log-card">
       <div class="log-header">
-        <div class="today-total" id="todayTotalTitle">这一天专注 0 分钟</div>
+        <div class="today-total" id="todayTotalTitle">
+          这一天专注 0 分钟
+          <!-- 新增：手动加时间按钮 -->
+          <button id="manualAddBtn" class="small-btn" type="button" style="margin-left:8px;">
+            手动添加时间
+          </button>
+        </div>
         <div class="filter-group">
           <label for="filterTag" style="font-size:.7rem;color:var(--muted);">按标签看</label>
           <select id="filterTag"><option value="__ALL__">全部</option></select>
@@ -151,6 +187,44 @@
     </section>
   </div>
 
+  <!-- 手动添加时间弹窗（新增） -->
+  <div id="manualAddModal" class="manual-modal">
+    <div class="manual-modal-row">
+      <label for="manualMinutesInput" style="font-size:.8rem;color:#4b5563;">
+        手动添加专注时间（分钟）
+      </label>
+    </div>
+    <div class="manual-modal-row">
+      <input
+        id="manualMinutesInput"
+        type="number"
+        min="1"
+        value="25"
+        style="width:100%;padding:6px 10px;border:1px solid #e5e7eb;border-radius:8px;font-size:.85rem;"
+      />
+    </div>
+    <div class="manual-modal-row">
+      <label for="manualTimeInput" style="font-size:.8rem;color:#4b5563;">
+        开始时间（可选）
+      </label>
+      <input
+        id="manualTimeInput"
+        type="time"
+        style="width:100%;padding:6px 10px;border:1px solid #e5e7eb;border-radius:8px;font-size:.85rem;"
+      />
+    </div>
+
+    <div class="manual-modal-row" style="font-size:.75rem;color:#6b7280;">
+      当前日期：<span id="manualDateLabel"></span> · 标签：<span id="manualTagLabel"></span>
+    </div>
+    <div class="manual-modal-actions">
+      <button id="manualCancelBtn" class="small-btn" type="button">取消</button>
+      <button id="manualConfirmBtn" class="small-btn" type="button" style="background:#2563eb;color:#fff;">
+        确认添加
+      </button>
+    </div>
+  </div>
+  
   <!-- 提示 / 标签选择器 -->
   <div id="toast" class="toast"></div>
   <div id="tagPicker" class="tag-picker">
@@ -192,6 +266,15 @@
     const tagPickerEl = document.getElementById('tagPicker');
     const tagPickerBodyEl = document.getElementById('tagPickerBody');
     const closeTagPickerEl = document.getElementById('closeTagPicker');
+    // 手动添加时间弹窗相关（新增）
+    const manualAddBtn = document.getElementById('manualAddBtn');
+    const manualAddModal = document.getElementById('manualAddModal');
+    const manualMinutesInput = document.getElementById('manualMinutesInput');
+    const manualTimeInput = document.getElementById('manualTimeInput');
+    const manualDateLabel = document.getElementById('manualDateLabel');
+    const manualTagLabel = document.getElementById('manualTagLabel');
+    const manualCancelBtn = document.getElementById('manualCancelBtn');
+    const manualConfirmBtn = document.getElementById('manualConfirmBtn');
 
     // ===== Timer State =====
     let timer = null;
@@ -276,6 +359,74 @@
       const m=Math.floor(sec/60), s=sec%60;
       return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
     }
+    /* === 新增：用于跨 0 点拆分记录 === */
+
+    // 取某个 Date 的 YYYY-MM-DD
+    function dateKeyFromDate(d){
+      return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    }
+
+    // totalSec：这轮专注总秒数（包含额外秒）
+    // startTimeStr：专注开始时间（HH:MM）
+    // tag：当前标签
+    function addFocusMinutesWithMidnightSplit(totalSec, startTimeStr, tag){
+      if(!totalSec || totalSec<=0) return;
+
+      const end = new Date();                                // 此刻结束
+      const start = new Date(end.getTime() - totalSec*1000); // 根据持续时长推算开始
+
+      if(!startTimeStr){
+        startTimeStr = getTimeString(start); // 你已有的函数
+      }
+
+      const startKey = dateKeyFromDate(start);
+      const endKey   = dateKeyFromDate(end);
+
+      // 没跨0点 → 一条记录
+      if(startKey === endKey){
+        const totalMin = Math.max(1, Math.round(totalSec/60));
+        sessionTempRecords.push({
+          id:'tmp-'+Date.now(),
+          date: startKey,
+          minutes: totalMin,
+          tag: tag,
+          startTime: startTimeStr
+        });
+        return;
+      }
+
+      // 跨0点 → 分两条
+    
+      // 0点时间点
+      const midnight = new Date(end);
+      midnight.setHours(0,0,0,0);
+
+      const secAfter  = Math.floor((end - midnight) / 1000); // 0点后的秒
+      const secBefore = totalSec - secAfter;                 // 0点前的秒
+
+      const minBefore = Math.max(1, Math.round(secBefore/60));
+      const minAfter  = Math.max(1, Math.round(secAfter/60));
+
+      const prevKey = dateKeyFromDate(new Date(midnight.getTime() - 1000));
+
+      // 前一天：真实开始时间
+      sessionTempRecords.push({
+        id:'tmp-'+Date.now(),
+        date: prevKey,
+        minutes: minBefore,
+        tag: tag,
+        startTime: startTimeStr
+      });
+
+      // 新一天：从 00:00 开始
+      sessionTempRecords.push({
+        id:'tmp-'+Date.now(),
+        date: endKey,
+        minutes: minAfter,
+        tag: tag,
+        startTime: '00:00'
+      });
+    }    
     function renderTime(sec){ timeEl.textContent = fmtMS(Math.max(0,sec)); }
     // === 最小补丁：改为复用共享 AudioContext（仅此替换） ===
     function playBeep(){
@@ -397,7 +548,11 @@
       });
       const total=dayLogs.reduce((s,l)=>s+l.minutes,0);
       todayInfoEl.textContent=`这一天 ${dayKey} (${currentFilterTag==='__ALL__'?'全部标签':currentFilterTag}) 专注 ${total} 分钟`;
-      todayTotalTitleEl.textContent=`这一天专注 ${total} 分钟`;
+      const manualBtn = todayTotalTitleEl.querySelector('button');
+      todayTotalTitleEl.textContent = `这一天专注 ${total} 分钟`;
+      if (manualBtn) {
+        todayTotalTitleEl.appendChild(manualBtn);
+      }
       const dayAll=logs.filter(l=>l.date===dayKey);
       const tagMap={};
       dayAll.forEach(l=>{ tagMap[l.tag]=(tagMap[l.tag]||0)+l.minutes; });
@@ -408,6 +563,44 @@
         p.textContent=`${t} · ${tagMap[t]} 分钟`;
         tagSummaryEl.appendChild(p);
       });
+    }
+
+    // ===== 手动添加专注时间（新增） =====
+    function openManualAddModal(){
+      // 用当前查看的日期 + 当前选中的标签
+      manualMinutesInput.value = '';
+      manualTimeInput.value = '';
+      manualDateLabel.textContent = currentViewDate;
+      manualTagLabel.textContent = currentSelectedTag;
+      manualAddModal.style.display = 'block';
+      setTimeout(()=>manualMinutesInput.focus(), 0);
+    }
+
+    function closeManualAddModal(){
+      manualAddModal.style.display = 'none';
+    }
+
+    function addManualMinutes(){
+      const val = Number(manualMinutesInput.value);
+      if(!val || val <= 0){
+        alert('请输入大于 0 的分钟数');
+        return;
+      }
+      const minutes = Math.round(val);
+      const timeStr = (manualTimeInput.value || '').trim();
+      const logs = loadLogs();
+      logs.push({
+        id: 'log-' + Date.now() + '-' + Math.random().toString(16).slice(2, 6),
+        date: currentViewDate,      // 手动加在当前查看的那一天
+        minutes: minutes,
+        tag: currentSelectedTag,     // 用当前选中的标签
+        startTime: timeStr || null
+      });
+      saveLogs(logs);
+
+      closeManualAddModal();
+      renderLogs(currentViewDate, currentFilterTag);
+      renderCalendar();
     }
 
     // 改：把按钮元素传入定位
@@ -607,22 +800,21 @@
       if(isRunning) return;
 
       // 若在额外计时状态，按开始=结束额外计时并切换到待定阶段
+      
       if(isOverrun && pendingNextMode){
-        const extraSec=Math.max(0, Math.floor((Date.now()-overrunStart)/1000));
-        if(overrunFor==='focus'){
-          const totalSec=currentFocusPlannedSeconds+extraSec;
-          const totalMin=Math.max(1, Math.round(totalSec/60));
-          sessionTempRecords.push({
-            id:'tmp-'+Date.now(),
-            date:getTodayKey(),
-            minutes: totalMin,
-            tag: currentSelectedTag,
-            startTime: currentFocusStart || getTimeString()
-          });
+        const extraSec = Math.max(0, Math.floor((Date.now() - overrunStart) / 1000));
+        if (overrunFor === 'focus') {
+          const totalSec = currentFocusPlannedSeconds + extraSec;
+
+          //  改成用“跨 0 点拆分”的函数
+          addFocusMinutesWithMidnightSplit(
+            totalSec,
+            currentFocusStart || getTimeString(),
+            currentSelectedTag
+          );
           currentFocusStart = null;
         }
         stopOverrun();
-
         const next = pendingNextMode;
         if(next === 'session-end'){
           saveSessionRecords(); sessionActive=false; pendingNextMode=null;
@@ -724,34 +916,32 @@
 
     function endSessionEarly(){
       if(sessionActive){
-        // ✅ 无论是否暂停，只要当前是专注阶段（且不在额外计时），都用剩余时间来算本轮专注
-        if(mode === 'focus' && !isOverrun){
-         const spentSec = Math.max(0, currentFocusPlannedSeconds - Math.max(0, remainingSeconds));
-         const totalMin = Math.max(1, Math.round(spentSec/60));
-    
-        if(totalMin > 0){
-          sessionTempRecords.push({
-              id:'tmp-'+Date.now(),
-              date:getTodayKey(),
-              minutes: totalMin,
-              tag: currentSelectedTag,
-              startTime: currentFocusStart || getTimeString()
-            });
+        if(isRunning && mode==='focus'){
+          const spentSec = Math.max(
+            0,
+            currentFocusPlannedSeconds - Math.max(0, remainingSeconds)
+          );
+
+          if(spentSec > 0){
+            addFocusMinutesWithMidnightSplit(
+              spentSec,
+              currentFocusStart || getTimeString(),
+              currentSelectedTag
+            );
             currentFocusStart = null;
           }
+
         } else if(isOverrun && overrunFor==='focus'){
-          const extraSec=Math.max(0, Math.floor((Date.now()-overrunStart)/1000));
-          const totalSec=currentFocusPlannedSeconds+extraSec;
-          const totalMin=Math.max(1, Math.round(totalSec/60));
-          sessionTempRecords.push({
-            id:'tmp-'+Date.now(),
-            date:getTodayKey(),
-            minutes: totalMin,
-            tag: currentSelectedTag,
-            startTime: currentFocusStart || getTimeString()
-          });
+          const extraSec = Math.max(0, Math.floor((Date.now()-overrunStart)/1000));
+          const totalSec = currentFocusPlannedSeconds + extraSec;
+
+          addFocusMinutesWithMidnightSplit(
+            totalSec,
+            currentFocusStart || getTimeString(),
+            currentSelectedTag
+          );
           currentFocusStart = null;
-         stopOverrun();
+          stopOverrun();
         }
       }
 
@@ -771,32 +961,35 @@
 
     // ===== Events =====
     startPauseBtn.addEventListener('click', ()=>{
-      if(isRunning) { pauseTimer(); return; }
-      if(pendingNextMode==='session-end'){
-        if(isOverrun && overrunFor==='focus'){
-          const extraSec=Math.max(0, Math.floor((Date.now()-overrunStart)/1000));
-          const totalSec=currentFocusPlannedSeconds+extraSec;
-          const totalMin=Math.max(1, Math.round(totalSec/60));
-          sessionTempRecords.push({
-            id:'tmp-'+Date.now(),
-            date:getTodayKey(),
-            minutes: totalMin,
-            tag: currentSelectedTag,
-            startTime: currentFocusStart || getTimeString()
-          });
+      if (isRunning) {
+        pauseTimer();
+        return;
+      }
+      // 会话已经全部结束，只是还没把最后一段专注记账
+      if (pendingNextMode === 'session-end') {
+        // 如果此时还在“专注结束后的额外计时”，把整段（原计划 + 额外）按跨 0 点拆分记入
+        if (isOverrun && overrunFor === 'focus') {
+          const extraSec = Math.max(0, Math.floor((Date.now() - overrunStart) / 1000));
+          const totalSec = currentFocusPlannedSeconds + extraSec;
+         addFocusMinutesWithMidnightSplit(
+           totalSec,
+           currentFocusStart || getTimeString(),
+           currentSelectedTag
+          );
           currentFocusStart = null;
         }
         stopOverrun();
         saveSessionRecords();
-        sessionActive=false;
-        pendingNextMode=null;
+        sessionActive = false;
+        pendingNextMode = null;
         setMode('focus');
-        currentRound=1;
+        currentRound = 1;
         updateRoundInfo();
         showToast('本次全部轮次已记录完成');
         return;
       }
-      startTimer();
+     // 正常情况：开始 / 继续计时
+     startTimer();
     });
 
     switchBtn.addEventListener('click', ()=>{
@@ -807,13 +1000,11 @@
           const extraSec=Math.max(0, Math.floor((Date.now()-overrunStart)/1000));
           const totalSec=currentFocusPlannedSeconds+extraSec;
           const totalMin=Math.max(1, Math.round(totalSec/60));
-          sessionTempRecords.push({
-            id:'tmp-'+Date.now(),
-            date:getTodayKey(),
-            minutes: totalMin,
-            tag: currentSelectedTag,
-            startTime: currentFocusStart || getTimeString()
-          });
+          addFocusMinutesWithMidnightSplit(
+            totalSec,
+            currentFocusStart || getTimeString(),
+            currentSelectedTag
+          );
           currentFocusStart = null;
         }
         stopOverrun();
@@ -865,6 +1056,18 @@
       roundsInput.value=v;
       if(!sessionActive) currentRound=1;
       updateRoundInfo();
+    });
+    
+    // 手动添加时间按钮事件（新增）
+    manualAddBtn.addEventListener('click', openManualAddModal);
+    manualCancelBtn.addEventListener('click', closeManualAddModal);
+    manualConfirmBtn.addEventListener('click', addManualMinutes);
+
+    // 在输入框里按 Enter 也可以提交
+    manualMinutesInput.addEventListener('keydown', (e)=>{
+      if(e.key === 'Enter'){
+        addManualMinutes();
+      }
     });
 
     // ===== Init =====

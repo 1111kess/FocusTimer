@@ -1,6 +1,6 @@
 {
   "name": "focus-timer",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "专注计时器桌面版",
   "main": "main.js",
   "scripts": {

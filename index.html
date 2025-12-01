@@ -44,7 +44,20 @@
     .small-btn{background:rgba(37,99,235,.08);color:#1d4ed8;border:none;border-radius:999px;padding:3px 8px;font-size:.7rem;cursor:pointer}
     .del-btn{background:rgba(220,38,38,.08);color:#dc2626}
     .calendar-card{background:var(--card);border-radius:var(--radius);padding:16px 20px 16px}
-    .calendar-header{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap}
+    .calendar-header{
+      display:flex;
+      justify-content:space-between;
+      align-items:flex-start;
+      gap:8px;
+      margin-bottom:10px;
+      flex-wrap:wrap;
+    }
+    .calendar-right{
+      display:flex;
+      flex-direction:column;
+      align-items:flex-end;
+      gap:4px;
+    }
     .calendar-controls{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
     .calendar-grid{display:grid;grid-template-columns:repeat(7,minmax(80px,1fr));gap:6px}
     .weekday{font-size:.7rem;color:var(--muted);text-align:center}
@@ -181,8 +194,24 @@
           <button id="nextMonthBtn" class="secondary" style="padding:4px 10px;">›</button>
           <button id="backToTodayBtn" class="secondary" style="padding:4px 10px;">回到今天</button>
         </div>
-        <div class="month-total" id="monthTotal">本月共专注 0 分钟</div>
+
+        <!-- 右侧三行信息 -->
+        <div class="calendar-right">
+          <!-- 第一行：几几年几几月共专注几分钟 -->
+          <div class="month-total" id="monthTotal">本月共专注 0 分钟</div>
+
+          <!-- 第二行：本月目标设定 -->
+          <div class="month-total" id="monthGoalArea" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+            <span>本月目标（分钟）</span>
+            <input id="monthGoalInput" type="number" min="1" placeholder="" style="width:90px;padding:4px 6px;">
+            <button id="saveMonthGoalBtn" class="small-btn" type="button">保存目标</button>
+          </div>
+
+          <!-- 第三行：本月目标进度 + 今天完成情况 -->
+          <div class="month-total" id="monthGoalProgress">本月未设置目标</div>
+        </div>
       </div>
+
       <div class="calendar-grid" id="calendarGrid"></div>
     </section>
   </div>
@@ -262,6 +291,9 @@
     const nextMonthBtn = document.getElementById('nextMonthBtn');
     const backToTodayBtn = document.getElementById('backToTodayBtn');
     const monthTotalEl = document.getElementById('monthTotal');
+    const monthGoalInput = document.getElementById('monthGoalInput');      // 新增：本月目标输入
+    const saveMonthGoalBtn = document.getElementById('saveMonthGoalBtn');  // 新增：保存目标按钮
+    const monthGoalProgressEl = document.getElementById('monthGoalProgress'); // 新增：本月进度文字
     const toastEl = document.getElementById('toast');
     const tagPickerEl = document.getElementById('tagPicker');
     const tagPickerBodyEl = document.getElementById('tagPickerBody');
@@ -444,7 +476,14 @@
       }catch(e){}
     }
     // === 最小补丁替换结束 ===
-    function showToast(text){ toastEl.textContent=text; toastEl.classList.add('show'); playBeep(); setTimeout(()=>toastEl.classList.remove('show'), 3500); }
+    function showToast(text, withSound = true){
+      toastEl.textContent = text;
+      toastEl.classList.add('show');
+      if (withSound) {
+        playBeep();
+      }
+      setTimeout(() => toastEl.classList.remove('show'), 3500);
+    }
 
     // ===== Storage =====
     function loadLogsRaw(){ return JSON.parse(localStorage.getItem('focusLogsV1')||'[]'); }
@@ -464,6 +503,19 @@
     function loadLogs(){ return migrateLogs(); }
     function loadTags(){ return JSON.parse(localStorage.getItem('focusTagsV1')||'["阅读","写作","代码","备考","未分类"]'); }
     function saveTags(tags){ localStorage.setItem('focusTagsV1', JSON.stringify(tags)); }
+
+    // ===== 月目标存储（新增）=====
+    // key: "YYYY-MM" -> 目标分钟数
+    function loadMonthGoals(){
+      try{
+        return JSON.parse(localStorage.getItem('focusMonthGoalsV1') || '{}');
+      }catch(e){
+        return {};
+      }
+    }
+    function saveMonthGoals(goals){
+      localStorage.setItem('focusMonthGoalsV1', JSON.stringify(goals));
+    }
 
     // ===== Tags UI =====
     function renderTags(){
@@ -548,8 +600,35 @@
       });
       const total=dayLogs.reduce((s,l)=>s+l.minutes,0);
       todayInfoEl.textContent=`这一天 ${dayKey} (${currentFilterTag==='__ALL__'?'全部标签':currentFilterTag}) 专注 ${total} 分钟`;
+
       const manualBtn = todayTotalTitleEl.querySelector('button');
-      todayTotalTitleEl.textContent = `这一天专注 ${total} 分钟`;
+
+      // 先算出基础文字
+      let titleText = `这一天专注 ${total} 分钟`;
+
+      // 如果该月设置了目标，则补充“每日目标 / 今日进度”信息
+      const goals = loadMonthGoals();
+      const monthKeyForDay = dayKey.slice(0,7); // "YYYY-MM"
+      const goalForDay = goals[monthKeyForDay] || 0;
+      if (goalForDay > 0) {
+        const yearNum = Number(monthKeyForDay.slice(0,4));
+        const monthNum = Number(monthKeyForDay.slice(5,7)); // 1~12
+        const daysInMonth = new Date(yearNum, monthNum, 0).getDate();
+        const dailyTarget = Math.round(goalForDay / daysInMonth);
+
+        // 只在“今天”时显示“已完成百分之几”
+        if (dayKey === getTodayKey()) {
+          const todayPercent = dailyTarget > 0
+            ? Math.min(100, Math.round(total / dailyTarget * 100))
+            : 0;
+          titleText += `（今日目标 ${dailyTarget} 分钟，已完成 ${todayPercent}%）`;
+        } else {
+          // 其它日期就只提示“本月每日目标”
+          titleText += `（本月每日目标 ${dailyTarget} 分钟）`;
+        }
+      }
+
+      todayTotalTitleEl.textContent = titleText;
       if (manualBtn) {
         todayTotalTitleEl.appendChild(manualBtn);
       }
@@ -708,40 +787,106 @@
         d.textContent=w;
         calendarGridEl.appendChild(d);
       });
-      const first=new Date(calendarYear,calendarMonth,1);
-      const startWd=first.getDay();
-      const days=new Date(calendarYear,calendarMonth+1,0).getDate();
-      const todayKey=getTodayKey();
-      for(let i=0;i<startWd;i++){
-        const e=document.createElement('div');
-        e.className='day-cell empty-cell';
+      const first = new Date(calendarYear, calendarMonth, 1);
+      const startWd = first.getDay();
+      const days = new Date(calendarYear, calendarMonth + 1, 0).getDate();
+      const todayKey = getTodayKey();
+      const monthKey = `${calendarYear}-${String(calendarMonth + 1).padStart(2, '0')}`;
+
+      const monthTotal = logs
+        .filter(l => l.date.startsWith(monthKey))
+        .reduce((s, l) => s + l.minutes, 0);
+
+      const goals = loadMonthGoals();
+      const goal = goals[monthKey] || 0;
+
+      if (monthTotalEl) {
+        monthTotalEl.textContent = `${monthKey.replace('-', ' 年 ')} 月共专注 ${monthTotal} 分钟`;
+      }
+
+      if (monthGoalInput) {
+        monthGoalInput.value = goal > 0 ? goal : '';
+      }
+
+      const percentMap = {};
+      let dailyTarget = 0;
+      if (goal > 0) {
+        const daysInMonth = days;
+        dailyTarget = Math.round(goal / daysInMonth);
+        let carry = 0;
+
+        for (let day = 1; day <= days; day++) {
+          const key = `${calendarYear}-${String(calendarMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+          const done = dayTotalMap[key] || 0;
+          const targetForDay = dailyTarget + carry;
+          let percent = 0;
+
+          if (targetForDay > 0) {
+            percent = Math.min(100, Math.round(done / targetForDay * 100));
+          }
+          percentMap[key] = percent;
+
+          if (done < targetForDay) {
+            carry += (targetForDay - done);
+          }
+        }
+      }
+
+      for (let i = 0; i < startWd; i++) {
+        const e = document.createElement('div');
+        e.className = 'day-cell empty-cell';
         calendarGridEl.appendChild(e);
       }
-      for(let day=1;day<=days;day++){
-        const key=`${calendarYear}-${String(calendarMonth+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
-        const cell=document.createElement('div');
-        cell.className='day-cell';
-        if(key===todayKey) cell.classList.add('today');
-        if(key===selectedDateKey) cell.classList.add('selected');
-        const num=document.createElement('div');
-        num.className='day-number';
-        num.textContent=day;
-        const mins=document.createElement('div');
-        mins.className='day-minutes';
-        const m=dayTotalMap[key]||0;
-        mins.textContent=m>0?`${m} 分钟`:'';
+
+      for (let day = 1; day <= days; day++) {
+        const key = `${calendarYear}-${String(calendarMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        const cell = document.createElement('div');
+        cell.className = 'day-cell';
+        if (key === todayKey) cell.classList.add('today');
+        if (key === selectedDateKey) cell.classList.add('selected');
+
+        const num = document.createElement('div');
+        num.className = 'day-number';
+        num.textContent = day;
+
+        const mins = document.createElement('div');
+        mins.className = 'day-minutes';
+        const m = dayTotalMap[key] || 0;
+
+        // 日历格子里只显示“几分钟”，不显示百分比
+        if (m > 0) {
+          mins.textContent = `${m} 分钟`;
+        } else {
+          mins.textContent = '';
+        }
+
         cell.appendChild(num);
         cell.appendChild(mins);
-        cell.addEventListener('click',()=>{
-          selectedDateKey=key;
-          renderLogs(key,currentFilterTag);
+
+        cell.addEventListener('click', () => {
+          selectedDateKey = key;
+          renderLogs(key, currentFilterTag);
           renderCalendar();
         });
+
         calendarGridEl.appendChild(cell);
       }
-      const monthKey=`${calendarYear}-${String(calendarMonth+1).padStart(2,'0')}`;
-      const monthTotal=logs.filter(l=>l.date.startsWith(monthKey)).reduce((s,l)=>s+l.minutes,0);
-      monthTotalEl.textContent=`${monthKey.replace('-',' 年 ')} 月共专注 ${monthTotal} 分钟`;
+
+      let progressText = '本月未设置目标';
+      if (goal > 0) {
+        const monthPercent = Math.min(100, Math.round(monthTotal / goal * 100));
+        const todayIsInThisMonth = todayKey.startsWith(monthKey);
+        const todayMinutes = todayIsInThisMonth ? (dayTotalMap[todayKey] || 0) : 0;
+        const todayPercent = todayIsInThisMonth
+          ? (percentMap[todayKey] != null ? percentMap[todayKey] : 0)
+          : 0;
+
+        progressText = `本月目标 ${goal} 分钟，已完成 ${monthPercent}%。 每日目标约 ${dailyTarget} 分钟。`;
+      }
+
+      if (monthGoalProgressEl) {
+        monthGoalProgressEl.textContent = progressText;
+      }
     }
     prevMonthBtn.addEventListener('click',()=>{
       calendarMonth--;
@@ -1059,6 +1204,23 @@
     });
     
     // 手动添加时间按钮事件（新增）
+    // 保存本月目标（新增）
+    if (saveMonthGoalBtn) {
+      saveMonthGoalBtn.addEventListener('click', ()=>{
+        const val = Number(monthGoalInput.value);
+        if (!val || val <= 0) {
+          alert('请输入大于 0 的本月目标分钟数');
+          return;
+        }
+        const goals = loadMonthGoals();
+        const monthKey = `${calendarYear}-${String(calendarMonth+1).padStart(2,'0')}`;
+        goals[monthKey] = Math.round(val);
+        saveMonthGoals(goals);
+        renderCalendar(); // 重新刷新月度统计和进度
+        showToast('本月目标已保存', false);
+      });
+    }
+
     manualAddBtn.addEventListener('click', openManualAddModal);
     manualCancelBtn.addEventListener('click', closeManualAddModal);
     manualConfirmBtn.addEventListener('click', addManualMinutes);
